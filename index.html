@@ -32,6 +32,10 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
 @media (prefers-reduced-motion: reduce){.bar i{animation:none;width:100%}}
 button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var(--accent);color:#fff;cursor:pointer}
 #retry{display:none}
+#nbar{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 14px;border-radius:14px;background:#1f2a37;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.3);font-size:14px;line-height:1.4}
+#nbar[hidden]{display:none}
+#nbar span{flex:1 1 200px}
+#nbar .later{background:transparent;border:1px solid rgba(255,255,255,.4)}
 </style>
 </head>
 <body>
@@ -41,6 +45,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   <div class="msg" id="msg">กำลังเปิดระบบ HR…</div>
   <button id="retry" type="button">ลองใหม่</button>
 </div>
+<div id="nbar" hidden role="dialog" aria-live="polite"><span id="ntext"></span><button id="non" type="button"></button><button id="nlater" class="later" type="button"></button></div>
 <iframe id="app" title="ระบบ HR โรงพิมพ์" allow="clipboard-write"></iframe>
 <script>
 (function(){
@@ -65,6 +70,54 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   retry.onclick = load;
   window.addEventListener('online', function(){ if (!sp.classList.contains('gone')) load(); });
   load();
+  /* ---------- แจ้งเตือนมือถือ ---------- */
+  var W = { src: null, origin: '', key: '', lang: 'th' };
+  var TXT = { th: ['เปิดการแจ้งเตือน เพื่อรับงานใหม่ ข่าวสาร และเตือนลงเวลา', 'เปิด', 'ไว้ทีหลัง'],
+    my: ['အလုပ်အသစ်၊ သတင်းနှင့် အချိန်မှတ်ရန် သတိပေးချက်များ ရရှိရန် အသိပေးချက်ကို ဖွင့်ပါ', 'ဖွင့်မည်', 'နောက်မှ'] };
+  var nbar = document.getElementById('nbar');
+  function pushOK() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+  function u8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+  function sameKey(sub) { try { var a = new Uint8Array(sub.options.applicationServerKey), b = u8(W.key); if (a.length !== b.length) return false; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; } catch (e) { return true; } }
+  function sendSub(sub) { if (sub && W.src) W.src.postMessage({ t: 'oshr-sub', sub: JSON.parse(JSON.stringify(sub)) }, W.origin); }
+  function subscribe(reg) { return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(W.key) }).then(sendSub); }
+  function later() { try { return Number(localStorage.getItem('oshr_nlater') || 0) > Date.now(); } catch (e) { return false; } }
+  function showBar() {
+    if (later()) return;
+    var x = TXT[W.lang] || TXT.th;
+    document.getElementById('ntext').textContent = '\uD83D\uDD14 ' + x[0];
+    document.getElementById('non').textContent = x[1];
+    document.getElementById('nlater').textContent = x[2];
+    nbar.hidden = false;
+  }
+  function check() {
+    if (!pushOK() || !W.key) return;
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (sub) {
+        if (Notification.permission === 'granted') {
+          if (sub && sameKey(sub)) return sendSub(sub);
+          return (sub ? sub.unsubscribe() : Promise.resolve()).then(function () { return subscribe(reg); });
+        }
+        if (Notification.permission !== 'denied') showBar();
+      });
+    }).catch(function () {});
+  }
+  document.getElementById('non').onclick = function () {
+    nbar.hidden = true;
+    Notification.requestPermission().then(function (p) {
+      if (p === 'granted') navigator.serviceWorker.ready.then(subscribe).catch(function () {});
+    });
+  };
+  document.getElementById('nlater').onclick = function () {
+    nbar.hidden = true;
+    try { localStorage.setItem('oshr_nlater', String(Date.now() + 3 * 86400000)); } catch (e) {}
+  };
+  window.addEventListener('message', function (ev) {
+    if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return;
+    var d = ev.data || {};
+    if (d.t !== 'oshr-hello' || !d.key) return;
+    W.src = ev.source; W.origin = ev.origin; W.key = String(d.key); W.lang = d.lang === 'my' ? 'my' : 'th';
+    check();
+  });
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
   }
