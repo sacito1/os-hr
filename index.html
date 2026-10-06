@@ -79,10 +79,30 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   function u8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
   function sameKey(sub) { try { var a = new Uint8Array(sub.options.applicationServerKey), b = u8(W.key); if (a.length !== b.length) return false; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; } catch (e) { return true; } }
   function sendSub(sub) { if (sub && W.src) W.src.postMessage({ t: 'oshr-sub', sub: JSON.parse(JSON.stringify(sub)) }, W.origin); }
+  function swReady() { return Promise.race([navigator.serviceWorker.ready, new Promise(function (_, no) { setTimeout(function () { no(new Error('sw')); }, 4000); })]); }
+  function stat() {
+    if (!W.src) return;
+    var st = { ok: pushOK(), perm: 'Notification' in window ? Notification.permission : '', sub: false,
+      ios: /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+      sa: (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true };
+    function post() { try { W.src.postMessage({ t: 'oshr-status', st: st }, W.origin); } catch (e) {} }
+    if (!st.ok) return post();
+    swReady().then(function (r) { return r.pushManager.getSubscription(); }).then(function (s) { st.sub = !!s; post(); }, post);
+  }
+  function enable() {
+    nbar.hidden = true;
+    if (!pushOK()) return stat();
+    var p; try { p = Notification.requestPermission(); } catch (e) { p = null; }
+    Promise.resolve(p).then(function (r) {
+      r = r || Notification.permission;
+      if (r === 'granted') return swReady().then(subscribe);
+      if (r === 'default') showBar(true);
+    }).catch(function () {}).then(stat);
+  }
   function subscribe(reg) { return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(W.key) }).then(sendSub); }
   function later() { try { return Number(localStorage.getItem('oshr_nlater') || 0) > Date.now(); } catch (e) { return false; } }
-  function showBar() {
-    if (later()) return;
+  function showBar(force) {
+    if (!force && later()) return;
     var x = TXT[W.lang] || TXT.th;
     document.getElementById('ntext').textContent = '\uD83D\uDD14 ' + x[0];
     document.getElementById('non').textContent = x[1];
@@ -90,8 +110,8 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     nbar.hidden = false;
   }
   function check() {
-    if (!pushOK() || !W.key) return;
-    navigator.serviceWorker.ready.then(function (reg) {
+    if (!pushOK() || !W.key) return stat();
+    swReady().then(function (reg) {
       return reg.pushManager.getSubscription().then(function (sub) {
         if (Notification.permission === 'granted') {
           if (sub && sameKey(sub)) return sendSub(sub);
@@ -99,14 +119,9 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
         }
         if (Notification.permission !== 'denied') showBar();
       });
-    }).catch(function () {});
+    }).catch(function () {}).then(stat);
   }
-  document.getElementById('non').onclick = function () {
-    nbar.hidden = true;
-    Notification.requestPermission().then(function (p) {
-      if (p === 'granted') navigator.serviceWorker.ready.then(subscribe).catch(function () {});
-    });
-  };
+  document.getElementById('non').onclick = enable;
   document.getElementById('nlater').onclick = function () {
     nbar.hidden = true;
     try { localStorage.setItem('oshr_nlater', String(Date.now() + 3 * 86400000)); } catch (e) {}
@@ -114,6 +129,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   window.addEventListener('message', function (ev) {
     if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return;
     var d = ev.data || {};
+    if (d.t === 'oshr-enable' && W.src === ev.source) return enable();
     if (d.t !== 'oshr-hello' || !d.key) return;
     W.src = ev.source; W.origin = ev.origin; W.key = String(d.key); W.lang = d.lang === 'my' ? 'my' : 'th';
     check();
