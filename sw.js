@@ -47,7 +47,9 @@ self.addEventListener('push', function (e) {
       if (!fresh.length) fresh = items.length ? [items[0]] : [{ id: 'x', title: 'OS HR', body: 'มีการแจ้งเตือนใหม่ · အသိပေးချက်အသစ်', tag: 'oshr' }];
       return seenPut(seen.concat(fresh.map(function (it) { return it.id; }))).then(function () {
         return Promise.all(fresh.reverse().map(function (it) {
-          return self.registration.showNotification(it.title || 'OS HR', { body: it.body || '', tag: it.tag || it.id, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: './' } });
+          var opt = { body: it.body || '', tag: it.tag || it.id, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: './' } };
+          if (it.u) { opt.requireInteraction = true; opt.renotify = true; opt.vibrate = [400, 150, 400, 150, 900]; } // เตือนลงเวลา: เด้งค้างจนกว่าจะกด + สั่นแรง
+          return self.registration.showNotification(it.title || 'OS HR', opt);
         }));
       });
     });
