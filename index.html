@@ -152,10 +152,23 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     g.t2 = setTimeout(function () { if (g.best && g.best.acc <= 100) fin(); }, 4000);
     g.t1 = setTimeout(fin, 12000);
   }
+  function mine(src) {
+    var f = document.getElementById('app'), cw = f && f.contentWindow, x = src;
+    for (var i = 0; i < 5 && x; i++) { if (x === cw) return true; var p; try { p = x.parent; } catch (e) { return false; } if (!p || p === x) return false; x = p; }
+    return false;
+  }
   window.addEventListener('message', function (ev) {
     if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return;
     var d = ev.data || {};
     if (d.t === 'oshr-geo') return geo(ev.source, ev.origin, d.id);
+    /* จำการเข้าสู่ระบบไว้ที่หน้าแอปนี้ (iPhone ไม่จำให้ในหน้า HR ที่อยู่ข้างใน) — รับ/ส่งเฉพาะหน้า HR ที่อยู่ในแอปนี้เท่านั้น */
+    if (d.t === 'oshr-tok' || d.t === 'oshr-tok-get') {
+      if (!mine(ev.source)) return;
+      if (d.t === 'oshr-tok') { try { if (d.tok) localStorage.setItem('oshr_tok', String(d.tok)); else localStorage.removeItem('oshr_tok'); } catch (e) {} return; }
+      var tk = ''; try { tk = localStorage.getItem('oshr_tok') || ''; } catch (e) {}
+      try { ev.source.postMessage({ t: 'oshr-tok-r', tok: tk }, ev.origin); } catch (e) {}
+      return;
+    }
     if (d.t === 'oshr-enable' && W.src === ev.source) return enable();
     if (d.t !== 'oshr-hello' || !d.key) return;
     W.src = ev.source; W.origin = ev.origin; W.key = String(d.key); W.lang = d.lang === 'my' ? 'my' : 'th';
