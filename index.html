@@ -127,13 +127,30 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     try { localStorage.setItem('oshr_nlater', String(Date.now() + 3 * 86400000)); } catch (e) {}
   };
   /* ---------- ตำแหน่ง GPS ให้ระบบ HR (ใช้ล็อกการลงเวลาให้อยู่ในบริษัท) ---------- */
+  var GS = null; /* รอบอ่านตำแหน่งที่กำลังทำอยู่ (คำขอที่มาพร้อมกันใช้ผลเดียวกัน) */
   function geo(src, origin, id) {
-    function reply(o) { o.t = 'oshr-geo-r'; o.id = id; try { src.postMessage(o, origin); } catch (e) {} }
-    if (!('geolocation' in navigator)) return reply({ ok: false, err: 'unsupported' });
-    navigator.geolocation.getCurrentPosition(function (p) {
-      reply({ ok: true, lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy });
-    }, function (e) { reply({ ok: false, err: e && e.code === 1 ? 'denied' : 'fail' }); },
-    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    var rq = { src: src, origin: origin, id: id };
+    function send(o) { GS_list.forEach(function (q) { var m = {}; for (var k in o) m[k] = o[k]; m.t = 'oshr-geo-r'; m.id = q.id; try { q.src.postMessage(m, q.origin); } catch (e) {} }); }
+    if (!('geolocation' in navigator)) { var GS_list = [rq]; return send({ ok: false, err: 'unsupported' }); }
+    if (GS) { GS.list.push(rq); return; }
+    /* อ่านตำแหน่งต่อเนื่องสูงสุด 12 วินาที แล้วใช้ค่าที่แม่นที่สุด (ได้ ±25 ม. ก็หยุดทันที, ได้ ±100 ม. หลัง 4 วินาทีก็พอ) */
+    var g = GS = { list: [rq], best: null, done: false, wid: null, t1: null, t2: null };
+    function stop() { g.done = true; clearTimeout(g.t1); clearTimeout(g.t2); try { navigator.geolocation.clearWatch(g.wid); } catch (e) {} if (GS === g) GS = null; GS_list = g.list; }
+    var GS_list = g.list;
+    function fin() {
+      if (g.done) return; stop();
+      var b = g.best;
+      send(b ? { ok: true, lat: b.lat, lng: b.lng, acc: b.acc } : { ok: false, err: 'fail' });
+    }
+    g.wid = navigator.geolocation.watchPosition(function (p) {
+      var c = p.coords;
+      if (!g.best || c.accuracy < g.best.acc) g.best = { lat: c.latitude, lng: c.longitude, acc: c.accuracy };
+      if (g.best.acc <= 25) fin();
+    }, function (e) {
+      if (e && e.code === 1 && !g.done) { stop(); send({ ok: false, err: 'denied' }); }
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    g.t2 = setTimeout(function () { if (g.best && g.best.acc <= 100) fin(); }, 4000);
+    g.t1 = setTimeout(fin, 12000);
   }
   window.addEventListener('message', function (ev) {
     if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return;
