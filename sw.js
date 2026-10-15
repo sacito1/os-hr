@@ -1,7 +1,7 @@
 /* OS HR app shell: caches only this small launcher page + icons.
    HR data is never cached — it always loads live from the online system. */
-var CACHE = 'os-hr-v2';
-var SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './favicon.png'];
+var CACHE = 'os-hr-v3';
+var SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './favicon.png', './badge-96.png'];
 var EXEC = 'https://script.google.com/macros/s/AKfycbwUwRF_ePYsDm5eJRDKfgdxxq_4ts2hBYUrZ63QiyJnRMgwN-OvLPCw0cscYm604g526A/exec';
 
 self.addEventListener('install', function (e) {
@@ -47,7 +47,7 @@ self.addEventListener('push', function (e) {
       if (!fresh.length) fresh = items.length ? [items[0]] : [{ id: 'x', title: 'OS HR', body: 'มีการแจ้งเตือนใหม่ · အသိပေးချက်အသစ်', tag: 'oshr' }];
       return seenPut(seen.concat(fresh.map(function (it) { return it.id; }))).then(function () {
         return Promise.all(fresh.reverse().map(function (it) {
-          var opt = { body: it.body || '', tag: it.tag || it.id, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: './' } };
+          var opt = { body: it.body || '', tag: it.tag || it.id, icon: 'icon-192.png', badge: 'badge-96.png', data: { url: './' } };
           if (it.u) { opt.requireInteraction = true; opt.renotify = true; opt.vibrate = [400, 150, 400, 150, 900]; } // เตือนลงเวลา: เด้งค้างจนกว่าจะกด + สั่นแรง
           return self.registration.showNotification(it.title || 'OS HR', opt);
         }));
