@@ -41,6 +41,8 @@ self.addEventListener('push', function (e) {
     if (!sub) return [];
     return hex40(sub.endpoint).then(function (h) { return fetch(EXEC + '?pull=' + h, { cache: 'no-store' }); }).then(function (r) { return r.json(); });
   }).catch(function () { return []; }).then(function (items) {
+    /* บอกหน้าแอปที่เปิดอยู่ให้โหลดข้อมูลใหม่ทันที (เช่น เพิ่งสแกนหน้า เวลาจะขึ้นในแอปเลย) */
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (ws) { ws.forEach(function (w) { try { w.postMessage({ t: 'oshr-push' }); } catch (x) {} }); }).catch(function () {});
     return seenGet().then(function (seen) {
       items = Array.isArray(items) ? items : [];
       var fresh = items.filter(function (it) { return seen.indexOf(it.id) < 0; });
