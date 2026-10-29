@@ -173,6 +173,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     }
     /* สำเนาข้อมูลล่าสุดของพนักงาน: เปิดแอปครั้งถัดไปแสดงได้ทันที (iPhone ไม่จำให้ในหน้า HR ที่อยู่ข้างใน) */
     if (d.t === 'oshr-bc') { if (!mine(ev.source) || typeof d.j !== 'string' || d.j.length > 900000) return; try { localStorage.setItem('oshr_bc', d.j); } catch (e) { try { localStorage.removeItem('oshr_bc'); } catch (x) {} } return; }
+    if (d.t === 'oshr-reload') { if (!mine(ev.source)) return; location.reload(); return; } /* ระบบมีอัปเดต → โหลดแอปใหม่ทั้งหน้า */
     if (d.t === 'oshr-enable' && W.src === ev.source) return enable();
     if (d.t !== 'oshr-hello' || !d.key) return;
     W.src = ev.source; W.origin = ev.origin; W.key = String(d.key); W.lang = d.lang === 'my' ? 'my' : 'th';
