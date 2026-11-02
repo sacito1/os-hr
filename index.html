@@ -38,6 +38,18 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
 #nbar[hidden]{display:none}
 #nbar span{flex:1 1 200px}
 #nbar .later{background:transparent;border:1px solid rgba(255,255,255,.4)}
+#ins{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg);overflow:auto}
+#ins[hidden]{display:none}
+#ins .box{width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+#ins h1{font-size:22px;margin:4px 0 0}
+#ins .my{color:var(--muted);font-size:14px;margin-top:-8px}
+#ins .big{width:100%;padding:18px;font-size:20px;font-weight:700;border-radius:14px;box-shadow:0 6px 18px rgba(31,111,235,.35)}
+#ins .big small{display:block;font-size:13px;font-weight:400;opacity:.9;margin-top:2px}
+#ins ol{text-align:left;margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:16px;line-height:1.45}
+#ins ol li span{display:block;color:var(--muted);font-size:13px}
+#ins .ok{font-size:44px;line-height:1}
+#ins .skip{background:transparent;color:var(--muted);text-decoration:underline;padding:6px}
+#ins .ic{display:inline-block;padding:1px 7px;border:1px solid rgba(127,127,127,.5);border-radius:6px;font-weight:700}
 </style>
 </head>
 <body>
@@ -48,7 +60,13 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   <button id="retry" type="button">ลองใหม่</button>
 </div>
 <div id="nbar" hidden role="dialog" aria-live="polite"><span id="ntext"></span><button id="non" type="button"></button><button id="nlater" class="later" type="button"></button></div>
-<iframe id="app" title="ระบบ HR โรงพิมพ์" allow="clipboard-write"></iframe>
+<div id="ins" hidden role="dialog" aria-modal="true" aria-labelledby="ins-h"><div class="box">
+  <div class="chip"><img src="icon-512.png" alt="OS Printing House" style="width:96px"></div>
+  <h1 id="ins-h">ติดตั้งแอป OS HR</h1><div class="my">OS HR အက်ပ် ထည့်သွင်းရန်</div>
+  <div id="ins-body" style="width:100%;display:flex;flex-direction:column;gap:14px;align-items:center"></div>
+  <button class="skip" id="ins-skip" type="button">ใช้งานผ่านเว็บไปก่อน · ဝဘ်ဖြင့် ဆက်သုံးမည်</button>
+</div></div>
+<iframe id="app" title="ระบบ HR โรงพิมพ์" allow="clipboard-write; autoplay"></iframe>
 <script>
 (function(){
   var EXEC = 'https://script.google.com/macros/s/AKfycbwUwRF_ePYsDm5eJRDKfgdxxq_4ts2hBYUrZ63QiyJnRMgwN-OvLPCw0cscYm604g526A/exec';
@@ -184,6 +202,49 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     /* แจ้งเตือนเข้า → ส่งต่อให้หน้า HR ที่อยู่ข้างในโหลดข้อมูลใหม่ทันที */
     navigator.serviceWorker.addEventListener('message', function (ev) { if (ev.data && ev.data.t === 'oshr-push' && W.src) { try { W.src.postMessage({ t: 'oshr-refresh' }, W.origin); } catch (e) {} } });
   }
+})();
+</script>
+<script>
+/* ---------- ติดตั้งจาก QR (ลิงก์ ?install) : Android กดปุ่มเดียว · iPhone บอกทีละขั้น ---------- */
+(function(){
+  var q = location.search + location.hash, want = /[?&#]install\b/.test(q);
+  var ua = navigator.userAgent || '', ios = /iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var android = /Android/i.test(ua), inapp = /Line\/|FBAN|FBAV|Instagram|MicroMessenger|; wv\)/i.test(ua);
+  var sa = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  var ev = null, box = document.getElementById('ins'), body = document.getElementById('ins-body');
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); ev = e; if (want && !sa) draw(); });
+  window.addEventListener('appinstalled', function () { ev = null; done(); });
+  function clean() { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+  function hide() { box.hidden = true; clean(); }
+  document.getElementById('ins-skip').onclick = hide;
+  function done() { if (!want) return; box.hidden = false;
+    body.innerHTML = '<div class="ok">✅</div><b style="font-size:18px">ติดตั้งแล้ว</b><div>ปิดหน้านี้ แล้วเปิดแอป <b>OS HR</b> จากหน้าจอมือถือ</div><div class="my">ထည့်သွင်းပြီးပါပြီ — ဤစာမျက်နှာကို ပိတ်ပြီး ဖုန်းမျက်နှာပြင်ရှိ <b>OS HR</b> ကို ဖွင့်ပါ</div>';
+    document.getElementById('ins-skip').textContent = 'เปิดในหน้านี้ · ဤနေရာတွင် ဖွင့်မည်'; }
+  function draw() {
+    box.hidden = false;
+    if (sa) { body.innerHTML = '<div class="ok">✅</div><b>ติดตั้งแล้ว ใช้งานได้เลย</b>'; return; }
+    if (inapp && android) {
+      var u = 'intent://' + location.host + location.pathname + '?install=1#Intent;scheme=https;package=com.android.chrome;end';
+      body.innerHTML = '<button class="big" id="ins-go" type="button">เปิดใน Chrome เพื่อติดตั้ง<small>Chrome ဖြင့် ဖွင့်ပြီး ထည့်သွင်းရန်</small></button>';
+      document.getElementById('ins-go').onclick = function () { location.href = u; };
+      setTimeout(function () { location.href = u; }, 300); return;
+    }
+    if (inapp && ios) {
+      body.innerHTML = '<ol><li>กด <span class="ic">•••</span> หรือ <span class="ic">⬆</span> มุมจอ แล้วเลือก <b>"เปิดใน Safari"</b><span>••• ကိုနှိပ်ပြီး "Safari တွင် ဖွင့်ရန်" ကို ရွေးပါ</span></li></ol>'; return;
+    }
+    if (ev) {
+      body.innerHTML = '<button class="big" id="ins-go" type="button">📲 แตะเพื่อติดตั้ง<small>ထည့်သွင်းရန် နှိပ်ပါ</small></button><div class="my" style="margin:0">แล้วกด <b>"ติดตั้ง"</b> ในหน้าต่างที่ขึ้นมา · ပေါ်လာသော "Install" ကို နှိပ်ပါ</div>';
+      document.getElementById('ins-go').onclick = function () { var e = ev; if (!e) return; e.prompt(); (e.userChoice || Promise.resolve({})).then(function (r) { if (r && r.outcome === 'accepted') done(); }); };
+      return;
+    }
+    if (ios) {
+      body.innerHTML = '<ol><li>กดปุ่ม <span class="ic">⬆</span> <b>แชร์</b> (ด้านล่างจอ หรือใน <span class="ic">•••</span>)<span>Share ⬆ ခလုတ်ကို နှိပ်ပါ (အောက်ခြေ သို့မဟုတ် ••• ထဲတွင်)</span></li><li>เลื่อนลง กด <b>"เพิ่มไปยังหน้าจอโฮม"</b><span>"Add to Home Screen" ကို နှိပ်ပါ</span></li><li>กด <b>"เพิ่ม"</b> มุมขวาบน — เสร็จ ✅<span>ညာဘက်အပေါ်ရှိ "Add" ကို နှိပ်ပါ</span></li></ol>'; return;
+    }
+    body.innerHTML = '<div class="msg">กำลังเตรียมปุ่มติดตั้ง…</div>';
+    setTimeout(function () { if (ev || sa || box.hidden) return;
+      body.innerHTML = '<ol><li>กด <span class="ic">⋮</span> มุมขวาบนของ Chrome<span>Chrome ညာဘက်အပေါ်ရှိ ⋮ ကို နှိပ်ပါ</span></li><li>เลือก <b>"ติดตั้งแอป"</b> หรือ <b>"เพิ่มลงในหน้าจอหลัก"</b><span>"Install app" သို့မဟုတ် "Add to Home screen" ကို ရွေးပါ</span></li><li>กด <b>"ติดตั้ง"</b> — เสร็จ ✅<span>"Install" ကို နှိပ်ပါ</span></li></ol>'; }, 3500);
+  }
+  if (want) { if (sa) clean(); else draw(); }
 })();
 </script>
 </body>
