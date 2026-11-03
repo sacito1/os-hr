@@ -1,6 +1,6 @@
 /* OS HR app shell: caches only this small launcher page + icons.
    HR data is never cached — it always loads live from the online system. */
-var CACHE = 'os-hr-v3';
+var CACHE = 'os-hr-v4';
 var SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './favicon.png', './badge-96.png'];
 var EXEC = 'https://script.google.com/macros/s/AKfycbwUwRF_ePYsDm5eJRDKfgdxxq_4ts2hBYUrZ63QiyJnRMgwN-OvLPCw0cscYm604g526A/exec';
 
@@ -10,7 +10,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.map(function (k) { return k === CACHE || k === 'os-hr-seen' ? null : caches.delete(k); }));
+    return Promise.all(keys.map(function (k) { return k.indexOf('os-hr-v') !== 0 || k === CACHE ? null : caches.delete(k); /* ลบเฉพาะแคชเก่าของแอปนี้เอง (ไม่ยุ่งกับแอปสาขาอื่นที่ติดตั้งในเครื่องเดียวกัน) */ }));
   }).then(function () { return self.clients.claim(); }));
 });
 
