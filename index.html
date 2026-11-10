@@ -69,6 +69,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
 <iframe id="app" title="ระบบ HR โรงพิมพ์" allow="clipboard-write; autoplay"></iframe>
 <script>
 (function(){
+  var branchKey='oshr22:'+new URL('./',location.href).pathname+':';
   var EXEC = 'https://script.google.com/macros/s/AKfycbwUwRF_ePYsDm5eJRDKfgdxxq_4ts2hBYUrZ63QiyJnRMgwN-OvLPCw0cscYm604g526A/exec';
   var f = document.getElementById('app'), sp = document.getElementById('splash');
   var msg = document.getElementById('msg'), bar = document.getElementById('bar'), retry = document.getElementById('retry');
@@ -120,7 +121,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     }).catch(function () {}).then(stat);
   }
   function subscribe(reg) { return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(W.key) }).then(sendSub); }
-  function later() { try { return Number(localStorage.getItem('oshr_nlater') || 0) > Date.now(); } catch (e) { return false; } }
+  function later() { try { return Number(localStorage.getItem(branchKey+'nlater') || 0) > Date.now(); } catch (e) { return false; } }
   function showBar(force) {
     if (!force && later()) return;
     var x = TXT[W.lang] || TXT.th;
@@ -144,7 +145,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   document.getElementById('non').onclick = enable;
   document.getElementById('nlater').onclick = function () {
     nbar.hidden = true;
-    try { localStorage.setItem('oshr_nlater', String(Date.now() + 3 * 86400000)); } catch (e) {}
+    try { localStorage.setItem(branchKey+'nlater', String(Date.now() + 3 * 86400000)); } catch (e) {}
   };
   /* ---------- ตำแหน่ง GPS ให้ระบบ HR (ใช้ล็อกการลงเวลาให้อยู่ในบริษัท) ---------- */
   var GS = null; /* รอบอ่านตำแหน่งที่กำลังทำอยู่ (คำขอที่มาพร้อมกันใช้ผลเดียวกัน) */
@@ -179,18 +180,19 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
   }
   window.addEventListener('message', function (ev) {
     if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return;
+    if(!mine(ev.source))return;
     var d = ev.data || {};
     if (d.t === 'oshr-geo') return geo(ev.source, ev.origin, d.id);
     /* จำการเข้าสู่ระบบไว้ที่หน้าแอปนี้ (iPhone ไม่จำให้ในหน้า HR ที่อยู่ข้างใน) — รับ/ส่งเฉพาะหน้า HR ที่อยู่ในแอปนี้เท่านั้น */
     if (d.t === 'oshr-tok' || d.t === 'oshr-tok-get') {
       if (!mine(ev.source)) return;
-      if (d.t === 'oshr-tok') { try { if (d.tok) localStorage.setItem('oshr_tok', String(d.tok)); else { localStorage.removeItem('oshr_tok'); localStorage.removeItem('oshr_bc'); } } catch (e) {} return; }
-      var tk = '', bc = ''; try { tk = localStorage.getItem('oshr_tok') || ''; bc = tk ? localStorage.getItem('oshr_bc') || '' : ''; } catch (e) {}
+      if (d.t === 'oshr-tok') { try { if (d.tok) localStorage.setItem(branchKey+'tok', String(d.tok)); else { localStorage.removeItem(branchKey+'tok'); localStorage.removeItem(branchKey+'bc'); } } catch (e) {} return; }
+      var tk = '', bc = ''; try { tk = localStorage.getItem(branchKey+'tok') || ''; bc = tk ? localStorage.getItem(branchKey+'bc') || '' : ''; } catch (e) {}
       try { ev.source.postMessage({ t: 'oshr-tok-r', tok: tk, bc: bc }, ev.origin); } catch (e) {}
       return;
     }
     /* สำเนาข้อมูลล่าสุดของพนักงาน: เปิดแอปครั้งถัดไปแสดงได้ทันที (iPhone ไม่จำให้ในหน้า HR ที่อยู่ข้างใน) */
-    if (d.t === 'oshr-bc') { if (!mine(ev.source) || typeof d.j !== 'string' || d.j.length > 900000) return; try { localStorage.setItem('oshr_bc', d.j); } catch (e) { try { localStorage.removeItem('oshr_bc'); } catch (x) {} } return; }
+    if (d.t === 'oshr-bc') { if (!mine(ev.source) || typeof d.j !== 'string' || d.j.length > 900000) return; try { localStorage.setItem(branchKey+'bc', d.j); } catch (e) { try { localStorage.removeItem(branchKey+'bc'); } catch (x) {} } return; }
     if (d.t === 'oshr-reload') { if (!mine(ev.source)) return; location.reload(); return; } /* ระบบมีอัปเดต → โหลดแอปใหม่ทั้งหน้า */
     if (d.t === 'oshr-enable' && W.src === ev.source) return enable();
     if (d.t !== 'oshr-hello' || !d.key) return;
