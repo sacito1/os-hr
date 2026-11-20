@@ -148,31 +148,55 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     try { localStorage.setItem(branchKey+'nlater', String(Date.now() + 3 * 86400000)); } catch (e) {}
   };
   /* ---------- ตำแหน่ง GPS ให้ระบบ HR (ใช้ล็อกการลงเวลาให้อยู่ในบริษัท) ---------- */
-  var GS = null; /* รอบอ่านตำแหน่งที่กำลังทำอยู่ (คำขอที่มาพร้อมกันใช้ผลเดียวกัน) */
-  function geo(src, origin, id) {
-    var rq = { src: src, origin: origin, id: id };
-    function send(o) { GS_list.forEach(function (q) { var m = {}; for (var k in o) m[k] = o[k]; m.t = 'oshr-geo-r'; m.id = q.id; try { q.src.postMessage(m, q.origin); } catch (e) {} }); }
-    if (!('geolocation' in navigator)) { var GS_list = [rq]; return send({ ok: false, err: 'unsupported' }); }
-    if (GS) { GS.list.push(rq); return; }
-    /* อ่านตำแหน่งต่อเนื่องสูงสุด 12 วินาที แล้วใช้ค่าที่แม่นที่สุด (ได้ ±25 ม. ก็หยุดทันที, ได้ ±100 ม. หลัง 4 วินาทีก็พอ) */
-    var g = GS = { list: [rq], best: null, done: false, wid: null, t1: null, t2: null };
-    function stop() { g.done = true; clearTimeout(g.t1); clearTimeout(g.t2); try { navigator.geolocation.clearWatch(g.wid); } catch (e) {} if (GS === g) GS = null; GS_list = g.list; }
-    var GS_list = g.list;
-    function fin() {
-      if (g.done) return; stop();
-      var b = g.best;
-      send(b ? { ok: true, lat: b.lat, lng: b.lng, acc: b.acc } : { ok: false, err: 'fail' });
+  // One native watch per page. Stop as soon as every waiting caller has a usable fix.
+  var activeLocation = null;
+  function geo(src, origin, id, site) {
+    var caller = {src:src, origin:origin, id:id, site:site};
+    function reply(request, result) {
+      try { request.src.postMessage(Object.assign({t:'oshr-geo-r',id:request.id},result),request.origin); }
+      catch (ignored) {}
     }
-    g.wid = navigator.geolocation.watchPosition(function (p) {
-      var c = p.coords;
-      if (!g.best || c.accuracy < g.best.acc) g.best = { lat: c.latitude, lng: c.longitude, acc: c.accuracy };
-      if (g.best.acc <= 25) fin();
-    }, function (e) {
-      if (e && e.code === 1 && !g.done) { stop(); send({ ok: false, err: 'denied' }); }
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
-    g.t2 = setTimeout(function () { if (g.best && g.best.acc <= 100) fin(); }, 4000);
-    g.t1 = setTimeout(fin, 12000);
+    if (!navigator.geolocation) { reply(caller,{ok:false,err:'unsupported'}); return; }
+    if (activeLocation) { activeLocation.callers.push(caller); return; }
+    var batch = {callers:[caller], best:null, watch:null, done:false};
+    activeLocation=batch;
+    function finish(error) {
+      if (batch.done) return;
+      batch.done=true; activeLocation=null;
+      clearTimeout(deadline); clearTimeout(accuracyTimer);
+      if (batch.watch!==null) navigator.geolocation.clearWatch(batch.watch);
+      var result=error ? {ok:false,err:error} : Object.assign({ok:true},batch.best);
+      batch.callers.forEach(function(request){ reply(request,result); });
+    }
+    function inside(sample, target) {
+      if (!target || !target.on || target.lat==null || target.lng==null || !(+target.r>0)) return false;
+      var rad=Math.PI/180, a=(sample.lat-target.lat)*rad, b=(sample.lng-target.lng)*rad;
+      var h=Math.sin(a/2)**2+Math.cos(sample.lat*rad)*Math.cos(target.lat*rad)*Math.sin(b/2)**2;
+      return 12742000*Math.asin(Math.min(1,Math.sqrt(h)))+sample.acc<=+target.r;
+    }
+    var started=Date.now();
+    function check() {
+      var best=batch.best;
+      if (!best) return;
+      var insideSite=best.acc<=100 && batch.callers.every(function(request){return inside(best,request.site)});
+      if (insideSite || best.acc<=25 || (best.acc<=100 && Date.now()-started>=4000)) finish();
+    }
+    var accuracyTimer=setTimeout(check,4000);
+    var deadline=setTimeout(function(){finish(batch.best ? null : 'fail')},12000);
+    try {
+      batch.watch=navigator.geolocation.watchPosition(function(position){
+        if (batch.done) return;
+        var c=position.coords, at=position.timestamp;
+        if (![c.latitude,c.longitude,c.accuracy,at].every(Number.isFinite) || Math.abs(c.latitude)>90 ||
+            Math.abs(c.longitude)>180 || c.accuracy<0 || Date.now()-at>15000 || at>Date.now()+1000) return;
+        if (!batch.best || c.accuracy<=batch.best.acc) batch.best={lat:c.latitude,lng:c.longitude,acc:c.accuracy,at:at};
+        check();
+      },function(error){ if (error && error.code===1) finish('denied'); },
+      {enableHighAccuracy:true,timeout:12000,maximumAge:0});
+      if (batch.done) navigator.geolocation.clearWatch(batch.watch);
+    } catch (error) { finish('fail'); }
   }
+
   function mine(src) {
     var f = document.getElementById('app'), cw = f && f.contentWindow, x = src;
     for (var i = 0; i < 5 && x; i++) { if (x === cw) return true; var p; try { p = x.parent; } catch (e) { return false; } if (!p || p === x) return false; x = p; }
@@ -182,7 +206,7 @@ button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:var
     if (!/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(ev.origin)) return;
     if(!mine(ev.source))return;
     var d = ev.data || {};
-    if (d.t === 'oshr-geo') return geo(ev.source, ev.origin, d.id);
+    if (d.t === 'oshr-geo') return geo(ev.source, ev.origin, d.id, d.site);
     /* จำการเข้าสู่ระบบไว้ที่หน้าแอปนี้ (iPhone ไม่จำให้ในหน้า HR ที่อยู่ข้างใน) — รับ/ส่งเฉพาะหน้า HR ที่อยู่ในแอปนี้เท่านั้น */
     if (d.t === 'oshr-tok' || d.t === 'oshr-tok-get') {
       if (!mine(ev.source)) return;
